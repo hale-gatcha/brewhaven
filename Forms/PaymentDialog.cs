@@ -25,7 +25,7 @@ public sealed class PaymentDialog : PopupDialog
     private readonly Label lblDue = new() { AutoSize = true, Font = Ui.Heading, ForeColor = Ui.Primary, Margin = new Padding(0, 0, 0, 12), UseMnemonic = false };
     private readonly ComboBox cboMethod = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly NumericUpDown numTendered = new() { Minimum = 0, Maximum = 1_000_000, DecimalPlaces = 2, ThousandsSeparator = true };
-    private readonly TextBox txtChange = new() { ReadOnly = true, TabStop = false };
+    private readonly TextBox txtChange = new ReadOnlyTextBox { TabStop = false };
     private readonly ComboBox cboCardType = new() { DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly TextBox txtCardLast4 = new() { MaxLength = 4, PlaceholderText = "e.g. 4821" };
     private readonly TextBox txtApproval = new() { MaxLength = 50 };

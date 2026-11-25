@@ -35,22 +35,23 @@ public sealed class DashboardForm : Form
         // Super Admin sees only these two pages (create / edit / remove through pop-up dialogs).
         if (role is "Super Admin") { Add("Subscription and T&C", "SA_Subscriptions"); Add("Manage Users", "SA_Users"); }
         // Admin: the same Subscription and Users pages as Super Admin (Users limited to Manager / Staff accounts),
-        // plus Customer Feedback, Manage Branches and Reports.
+        // plus Customer Feedback (manage the concerns Staff logged: no Create), Manage Branches and Reports.
         if (role is "Admin")
         {
             Add("Subscription and T&C", "SA_Subscriptions"); Add("Manage Users", "SA_Users");
             Add("Customer Feedback", "AD_Feedback"); Add("Manage Branches", "AD_Branches"); Add("Reports", "AD_Reports");
         }
-        // Manager: Customer Feedback is the same page Admin uses; Reports is Admin's page limited to the Manager's branch.
+        // Manager: Customer Feedback is a read-only monitoring page for their branch; Reports is Admin's page limited to the Manager's branch.
         if (role is "Manager")
         {
-            Add("Customer Feedback", "AD_Feedback"); Add("View Customer History", "MG_History"); Add("Redeem Rewards", "MG_Rewards");
+            Add("Customer Feedback", "MG_Feedback"); Add("View Customer History", "MG_History"); Add("Redeem Rewards", "MG_Rewards");
             Add("Manage Promotions", "MG_Promotions"); Add("View Sales", "MG_Sales"); Add("Inventory", "MG_Inventory"); Add("Reports", "MG_Reports");
         }
+        // Staff: log walk-in customers' feedback / inquiries / complaints under Customer Concerns.
         if (role is "Staff")
         {
-            Add("Customer Registration", "ST_Customers"); Add("Browse Menu & Place Order", "ST_Order");
-            Add("Record Customer Info", "ST_QuickCustomer");
+            Add("Customer Registration", "ST_Customers"); Add("Browse Menu and Place Order", "ST_Order");
+            Add("Record Customer Information", "ST_QuickCustomer"); Add("Customer Concerns", "ST_Concerns");
         }
 
         // Add any missing columns/tables the pages rely on (once per run; harmless if already done).
@@ -105,11 +106,12 @@ public sealed class DashboardForm : Form
             "Branches" => new CrudForm(CrudForm.BranchDefinition), "Customers" => new CrudForm(CrudForm.CustomerDefinition),
             "Promotions" => new CrudForm(CrudForm.PromotionDefinition), "Rewards" => new CrudForm(CrudForm.RewardDefinition),
             "MenuItems" => new CrudForm(CrudForm.MenuItemDefinition), "Preferences" => new CrudForm(CrudForm.PreferenceDefinition),
-            "Inventory" => new CrudForm(CrudForm.InventoryDefinition), "Feedback" => new FeedbackForm(),
+            "Inventory" => new CrudForm(CrudForm.InventoryDefinition),
             "Orders" => new OrderForm(), "Sales" or "Reports" => new SalesReportForm(),
             "CustomerHistory" => new CustomerHistoryForm(),
             "SA_Subscriptions" => new SubscriptionListForm(), "SA_Users" => new UserListForm(),
             "AD_Feedback" => new FeedbackListForm(), "AD_Branches" => new BranchListForm(), "AD_Reports" => new ReportsForm(),
+            "MG_Feedback" => new ConcernMonitorForm(), "ST_Concerns" => new StaffConcernsForm(),
             "MG_History" => new CustomerHistoryForm(), "MG_Rewards" => new RedeemRewardsForm(), "MG_Promotions" => new PromotionListForm(),
             "MG_Sales" => new SalesViewForm(), "MG_Inventory" => new InventoryListForm(),
             "MG_Reports" => new ReportsForm(Session.CurrentUser?.BranchId ?? 0),
@@ -135,7 +137,6 @@ public sealed class DashboardForm : Form
         "MenuItems" => "Drinks, food and pricing",
         "Preferences" => "What your regulars usually order",
         "Inventory" => "Stock levels per branch",
-        "Feedback" => "Track feedback, inquiries and complaints to resolution",
         "Orders" => "Build an order and take payment",
         "Sales" or "Reports" => "Completed sales by day, week or month",
         "CustomerHistory" => "Past orders for a customer",
@@ -143,7 +144,9 @@ public sealed class DashboardForm : Form
         "SA_Users" => UserDialog.AdminRestricted
             ? "Create, edit and remove Manager and Staff accounts"
             : "Create, edit and remove user accounts, roles and branches",
-        "AD_Feedback" => "Feedback, inquiries and complaints, colour-coded by status",
+        "AD_Feedback" => "Check and manage the concerns Staff logged: status, assignment and resolution",
+        "MG_Feedback" => "Monitor concerns for your branch and see what to improve (read-only)",
+        "ST_Concerns" => "Log walk-in customers' feedback, inquiries and complaints",
         "AD_Branches" => "Branch locations, contacts and branch managers",
         "AD_Reports" => "Sales, orders, feedback and branch summaries by date range",
         "MG_History" => "A customer's past orders and preferences (double-click an order for details)",

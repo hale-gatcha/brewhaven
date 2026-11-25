@@ -145,6 +145,12 @@ public static class Ui
         host.BackColor = Surface; host.Width = w + host.Padding.Horizontal;
         input.Dock = DockStyle.Fill;
         host.Controls.Add(input);
+        if (input is TextBox { ReadOnly: true })
+        {
+            // Read-only: arrow pointer and no "editing" focus border, so it doesn't look typeable.
+            host.Cursor = Cursors.Default;
+            return host;
+        }
         input.GotFocus += (_, _) => { host.Focused_ = true; host.Invalidate(); };
         input.LostFocus += (_, _) => { host.Focused_ = false; host.Invalidate(); };
         host.Click += (_, _) => input.Focus();
@@ -361,6 +367,35 @@ public static class Ui
     {
         while (c != null) { if (c.BackColor.A == 255) return c.BackColor; c = c.Parent; }
         return Background;
+    }
+}
+
+/// <summary>
+/// Display-only text box: can't be typed in, shows the normal arrow pointer and never shows the blinking text cursor.
+/// Long text can still be scrolled (multiline) and selected / copied.
+/// </summary>
+public sealed class ReadOnlyTextBox : TextBox
+{
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool HideCaret(IntPtr hWnd);
+
+    private const int WM_SETFOCUS = 0x0007, WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101,
+                      WM_MOUSEMOVE = 0x0200, WM_LBUTTONDOWN = 0x0201, WM_LBUTTONUP = 0x0202, WM_LBUTTONDBLCLK = 0x0203;
+
+    public ReadOnlyTextBox()
+    {
+        ReadOnly = true;
+        Cursor = Cursors.Default;
+        BackColor = Ui.Ivory; ForeColor = Ui.Espresso;
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        base.WndProc(ref m);
+        // Windows re-shows the caret when the box gets focus or is clicked / navigated; hide it right after.
+        if (m.Msg is WM_SETFOCUS or WM_KEYDOWN or WM_KEYUP or WM_MOUSEMOVE or WM_LBUTTONDOWN or WM_LBUTTONUP or WM_LBUTTONDBLCLK
+            && IsHandleCreated && Focused)
+            HideCaret(Handle);
     }
 }
 

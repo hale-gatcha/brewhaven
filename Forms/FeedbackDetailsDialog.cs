@@ -1,89 +1,99 @@
-using System.Data;
+using BrewHaven.DataAccess;
+using BrewHaven.Models;
 using System.Drawing;
-using static BrewHaven.DataAccess.DbHelper;
 
 namespace BrewHaven.Forms;
 
 /// <summary>
-/// Read-only "Feedback Details" pop-up: every field of one feedback / inquiry / complaint, with Type and Status
-/// badges and a star rating. "Edit" (Admin / Manager only) closes it with DialogResult.Yes so the list page can
-/// open the edit dialog for the same record; "Close" closes it.
+/// Read-only "Concern Details" pop-up: every field of one feedback / inquiry / complaint, with Type and Status badges
+/// and a star rating. Loaded through FeedbackRepository, so each role only sees what it may see
+/// (Staff: what they logged; Manager: their branch; Admin: everything).
+/// "Manage" (Admin only) closes it with DialogResult.Yes so the list page can open ManageConcernDialog.
+/// Internal notes are shown to Admin and Manager, never to Staff.
 /// </summary>
 public sealed class FeedbackDetailsDialog : PopupDialog
 {
     private static readonly Color SandBeige = ColorTranslator.FromHtml("#D1B5A1");
 
     private readonly int feedbackId;
+    private readonly bool showInternalNotes;
     private readonly TextBox txtFeedbackNo = ReadOnlyBox();
     private readonly TextBox txtDateSubmitted = ReadOnlyBox();
     private readonly Label lblTypeBadge = BadgeLabel();
     private readonly Label lblStatusBadge = BadgeLabel();
+    private readonly TextBox txtCategory = ReadOnlyBox();
     private readonly StarRating ratingStars = new();
     private readonly TextBox txtCustomer = ReadOnlyBox();
     private readonly TextBox txtContact = ReadOnlyBox();
     private readonly TextBox txtEmail = ReadOnlyBox();
     private readonly TextBox txtBranch = ReadOnlyBox();
     private readonly TextBox txtLoggedBy = ReadOnlyBox();
-    private readonly TextBox txtAssignedTo = ReadOnlyBox();
-    private readonly TextBox txtDateResolved = ReadOnlyBox();
     private readonly TextBox txtSubject = ReadOnlyBox();
+    private readonly TextBox txtDateResolved = ReadOnlyBox();
+    private readonly TextBox txtUpdatedBy = ReadOnlyBox();
+    private readonly TextBox txtUpdatedAt = ReadOnlyBox();
     private readonly TextBox txtMessage = ReadOnlyBox(multiline: true);
     private readonly TextBox txtResolution = ReadOnlyBox(multiline: true);
-    private Control? ratingField;
+    private readonly TextBox txtInternalNotes = ReadOnlyBox(multiline: true);
+    private readonly Control ratingField, internalNotesField;
 
-    /// <param name="canEdit">Shows the Edit button (Admin and Manager).</param>
-    public FeedbackDetailsDialog(int feedbackId, bool canEdit)
-        : base("Feedback Details", "Feedback Details", canEdit ? "Edit" : null, 0, 740)
+    /// <param name="canManage">Shows the Manage button (Admin only; the repository enforces it anyway).</param>
+    public FeedbackDetailsDialog(int feedbackId, bool canManage)
+        : base("Concern Details", "Concern Details", canManage && FeedbackRepository.CurrentRoleIs("Admin") ? "Manage" : null, 0, 740)
     {
         this.feedbackId = feedbackId;
+        showInternalNotes = !FeedbackRepository.CurrentRoleIs("Staff");
         // Fit smaller screens: the field area scrolls if the window would be taller than the screen.
-        ClientSize = new Size(740, Math.Min(850, Screen.PrimaryScreen?.WorkingArea.Height - 60 ?? 850));
+        ClientSize = new Size(740, Math.Min(900, Screen.PrimaryScreen?.WorkingArea.Height - 60 ?? 900));
         Fields.AutoScroll = true;
 
         // Header bar: Dark Chocolate with white text.
         LblTitle.BackColor = Ui.DarkChocolate; LblTitle.ForeColor = Color.White;
         LblTitle.Height = 48; LblTitle.TextAlign = ContentAlignment.MiddleLeft; LblTitle.Padding = new Padding(16, 0, 0, 0);
-        LblTitle.Margin = new Padding(0, 0, 0, 12);
         Controls.Add(Ui.Spacer(DockStyle.Top, 14)); Controls.SetChildIndex(Controls[^1], 1);   // gap under the header bar
 
         BtnCancel.Text = "Close";
-        AcceptButton = BtnCancel;        // Enter closes; Edit is a deliberate click
-        BtnSave.DialogResult = DialogResult.Yes;   // Edit: close and let the list page open the edit dialog
+        AcceptButton = BtnCancel;                    // Enter closes; Manage is a deliberate click
+        BtnSave.DialogResult = DialogResult.Yes;     // Manage: close and let the list page open ManageConcernDialog
 
         var typeStatus = new FlowLayoutPanel { Height = 34, Width = Col, BackColor = Ui.Background, WrapContents = false, Margin = Padding.Empty };
         typeStatus.Controls.Add(lblTypeBadge); typeStatus.Controls.Add(lblStatusBadge);
 
-        AddField("FEEDBACK NO.", txtFeedbackNo, 0);
+        AddField("CONCERN NO.", txtFeedbackNo, 0);
         AddField("DATE SUBMITTED", txtDateSubmitted, 1);
         AddField("TYPE / STATUS", typeStatus, 0);
-        ratingField = AddField("RATING", ratingStars, 1);
+        AddField("CATEGORY", txtCategory, 1);
         AddField("CUSTOMER", txtCustomer, 0);
-        AddField("CONTACT NUMBER", txtContact, 1);
-        AddField("EMAIL", txtEmail, 0);
-        AddField("BRANCH", txtBranch, 1);
-        AddField("LOGGED BY", txtLoggedBy, 0);
-        AddField("ASSIGNED TO", txtAssignedTo, 1);
-        AddField("SUBJECT", txtSubject, 0);
-        AddField("DATE RESOLVED", txtDateResolved, 1);
+        ratingField = AddField("RATING", ratingStars, 1);
+        AddField("CONTACT NUMBER", txtContact, 0);
+        AddField("EMAIL", txtEmail, 1);
+        AddField("BRANCH", txtBranch, 0);
+        AddField("LOGGED BY", txtLoggedBy, 1);
+        AddField("SUBJECT", txtSubject, 0, span: true);
         AddField("MESSAGE", txtMessage, 0, span: true, multilineHeight: 110);
-        AddField("RESOLUTION / RESPONSE NOTES", txtResolution, 0, span: true, multilineHeight: 84);
+        AddField("RESOLUTION / RESPONSE NOTES", txtResolution, 0, span: true, multilineHeight: 80);
+        AddField("DATE RESOLVED", txtDateResolved, 0);
+        AddField("LAST UPDATED BY", txtUpdatedBy, 1);
+        AddField("LAST UPDATED", txtUpdatedAt, 0);
+        internalNotesField = AddField("INTERNAL NOTES (STAFF CAN'T SEE THESE)", txtInternalNotes, 0, span: true, multilineHeight: 80);
+        internalNotesField.Visible = showInternalNotes;
 
         Load += (_, _) => { if (!LoadRecord()) CancelAfterLoad(); };
         // Start on the Close button with nothing highlighted in the read-only boxes.
         Shown += (_, _) =>
         {
-            foreach (var box in new[] { txtMessage, txtResolution }) { box.SelectionStart = 0; box.SelectionLength = 0; }
+            foreach (var box in new[] { txtMessage, txtResolution, txtInternalNotes }) { box.SelectionStart = 0; box.SelectionLength = 0; }
             BtnCancel.Focus();
         };
     }
 
-    private static TextBox ReadOnlyBox(bool multiline = false) => new()
+    private static TextBox ReadOnlyBox(bool multiline = false) => new ReadOnlyTextBox
     {
         ReadOnly = true, BackColor = Ui.Ivory, ForeColor = Ui.Espresso, TabStop = multiline,
         Multiline = multiline, ScrollBars = multiline ? ScrollBars.Vertical : ScrollBars.None, WordWrap = true
     };
 
-    private static Label BadgeLabel() => new PillLabel
+    internal static Label BadgeLabel() => new PillLabel
     {
         AutoSize = true, Font = Ui.SmallBold, Padding = new Padding(12, 6, 12, 6), Margin = new Padding(0, 2, 8, 0), UseMnemonic = false
     };
@@ -103,69 +113,51 @@ public sealed class FeedbackDetailsDialog : PopupDialog
         }
     }
 
-    private static void SetBadge(Label badge, string text, Color back, Color fore)
+    /// <summary>Colours the Type and Status badges the same way everywhere.</summary>
+    internal static void SetBadges(Label typeBadge, Label statusBadge, string type, string status)
     {
-        badge.Text = text.ToUpperInvariant(); badge.BackColor = back; badge.ForeColor = fore;
+        typeBadge.Text = type.ToUpperInvariant(); typeBadge.ForeColor = Color.White;
+        typeBadge.BackColor = type switch { "Complaint" => Ui.Danger, "Inquiry" => Ui.CocoaBrown, _ => Ui.CoffeeBrown };
+        statusBadge.Text = status.ToUpperInvariant(); statusBadge.ForeColor = Ui.Espresso;
+        statusBadge.BackColor = status switch { "Open" => Ui.WarmSand, "In Progress" => SandBeige, "Resolved" => Ui.Cream, _ => Ui.Border };
     }
+
+    private static string Stamp(DateTime? value) => value is DateTime d ? d.ToString("MMM d, yyyy h:mm tt") : "-";
 
     private bool LoadRecord()
     {
-        const string sql = """
-            SELECT f.FeedbackId, f.Type, f.Status, f.Subject, f.Message, f.Rating, f.DateSubmitted, f.ResolutionNotes, f.DateResolved,
-                   c.FullName AS CustomerName, c.ContactNumber AS CustomerContact, c.Email AS CustomerEmail,
-                   b.BranchName, s.FullName AS LoggedBy, a.FullName AS AssignedTo
-            FROM Feedback f
-            INNER JOIN Branches b ON b.BranchId = f.BranchId
-            LEFT JOIN Customers c ON c.CustomerId = f.CustomerId
-            LEFT JOIN Users s ON s.UserId = f.SubmittedByUserId
-            LEFT JOIN Users a ON a.UserId = f.AssignedTo
-            WHERE f.FeedbackId = @Id
-            """;
         try
         {
-            DataTable t = Query(sql, P("@Id", SqlDbType.Int, feedbackId));
-            if (t.Rows.Count == 0)
+            ConcernDetails? r = new FeedbackRepository().GetDetails(feedbackId);
+            if (r is null)
             {
-                MessageBox.Show("This entry no longer exists. It may have been removed.", "Not Found", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("This entry no longer exists, was removed, or isn't available to your account.", "Not Found",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return false;
             }
-            DataRow r = t.Rows[0];
-            string type = (string)r["Type"], status = (string)r["Status"];
-
-            txtFeedbackNo.Text = $"#{r["FeedbackId"]}";
-            txtDateSubmitted.Text = ((DateTime)r["DateSubmitted"]).ToString("MMM d, yyyy h:mm tt");
-            SetBadge(lblTypeBadge, type, type switch { "Complaint" => Ui.Danger, "Inquiry" => Ui.CocoaBrown, _ => Ui.CoffeeBrown }, Color.White);
-            SetBadge(lblStatusBadge, status, status switch
-            {
-                "Open" => Ui.WarmSand,
-                "In Progress" => SandBeige,
-                "Resolved" => Ui.Cream,
-                _ => Ui.Border   // Closed
-            }, Ui.Espresso);
-
-            // Rating only applies to the Feedback type.
-            ratingField!.Visible = type == "Feedback";
-            ratingStars.Rating = r["Rating"] as int?;
-
-            if (r["CustomerName"] is string customer)
-            {
-                txtCustomer.Text = customer;
-                txtContact.Text = r["CustomerContact"] as string ?? "-";
-                txtEmail.Text = r["CustomerEmail"] as string ?? "-";
-            }
-            else { txtCustomer.Text = "Walk-in guest"; txtContact.Text = "-"; txtEmail.Text = "-"; }
-
-            txtBranch.Text = (string)r["BranchName"];
-            txtLoggedBy.Text = r["LoggedBy"] as string ?? "-";
-            txtAssignedTo.Text = r["AssignedTo"] as string ?? "Not assigned";
-            txtSubject.Text = (string)r["Subject"];
-            txtDateResolved.Text = r["DateResolved"] is DateTime resolved ? resolved.ToString("MMM d, yyyy h:mm tt") : "";
+            txtFeedbackNo.Text = r.IsArchived ? $"#{r.FeedbackId}  (archived)" : $"#{r.FeedbackId}";
+            txtDateSubmitted.Text = $"{Stamp(r.DateSubmitted)}  ·  {r.SubmittedVia}";
+            SetBadges(lblTypeBadge, lblStatusBadge, r.Type, r.Status);
+            txtCategory.Text = r.Category;
+            ratingField.Visible = r.Type == "Feedback";   // rating only applies to Feedback
+            ratingStars.Rating = r.Rating;
+            txtCustomer.Text = r.CustomerName;
+            txtContact.Text = r.CustomerContact ?? "-";
+            txtEmail.Text = r.CustomerEmail ?? "-";
+            txtBranch.Text = r.BranchName;
+            txtLoggedBy.Text = r.LoggedBy;
+            txtSubject.Text = r.Subject;
             // Windows TextBoxes need \r\n for line breaks.
-            txtMessage.Text = ((string)r["Message"]).ReplaceLineEndings("\r\n");
-            txtResolution.Text = (r["ResolutionNotes"] as string ?? "No resolution notes yet.").ReplaceLineEndings("\r\n");
-            Text = $"Feedback Details - #{feedbackId}";
+            txtMessage.Text = r.Message.ReplaceLineEndings("\r\n");
+            txtResolution.Text = (r.ResolutionNotes ?? "No resolution notes yet.").ReplaceLineEndings("\r\n");
+            txtDateResolved.Text = Stamp(r.DateResolved);
+            txtUpdatedBy.Text = r.UpdatedBy ?? "-";
+            txtUpdatedAt.Text = Stamp(r.UpdatedAt);
+            txtInternalNotes.Text = (r.InternalNotes ?? "No internal notes.").ReplaceLineEndings("\r\n");
+            BtnSave.Visible = BtnSave.Visible && !r.IsArchived;   // archived entries can't be managed
+            Text = $"Concern Details - #{feedbackId}";
             return true;
         }
-        catch (Exception ex) { ShowError("Could not load the feedback details.", ex); return false; }
+        catch (Exception ex) { ShowError("Could not load the concern details.", ex); return false; }
     }
 }
