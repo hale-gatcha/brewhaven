@@ -19,7 +19,7 @@ public sealed class DashboardForm : Form
 
     public DashboardForm()
     {
-        Text = $"Brew Haven - {Session.CurrentUser?.FullName}"; WindowState = FormWindowState.Maximized;
+        Text = $"Brew Haven - {DataAccess.DbHelper.CurrentTenant?.ShopName} - {Session.CurrentUser?.FullName}"; WindowState = FormWindowState.Maximized;
         MinimumSize = new Size(1100, 680); BackColor = Ui.Background; Font = Ui.Body;
         Load += (_, _) => FontHelper.ApplyToAll(this);
 

@@ -6,16 +6,32 @@ namespace BrewHaven.DataAccess;
 
 public static class DbHelper
 {
-    public static string ConnectionString
+    /// <summary>MasterCRM: the directory of shops (tenants). The only connection string in App.config.</summary>
+    public static string MasterConnectionString
     {
         get
         {
-            var setting = ConfigurationManager.ConnectionStrings["BrewHavenDb"];
+            var setting = ConfigurationManager.ConnectionStrings["MasterCRM"];
             if (setting is null || string.IsNullOrWhiteSpace(setting.ConnectionString))
-                throw new InvalidOperationException("Database connection string is missing from App.config.");
+                throw new InvalidOperationException("The MasterCRM connection string is missing from App.config.");
             return setting.ConnectionString;
         }
     }
+
+    public static SqlConnection CreateMasterConnection() => new(MasterConnectionString);
+
+    /// <summary>The shop picked on the login screen. Every query below runs against this shop's database.</summary>
+    public static Tenant? CurrentTenant { get; private set; }
+
+    /// <summary>Switches all data access to <paramref name="tenant"/>'s database (null = none selected).</summary>
+    public static void UseTenant(Tenant? tenant)
+    {
+        CurrentTenant = tenant;
+        schemaChecked = false;   // each tenant database gets its own schema check
+    }
+
+    public static string ConnectionString =>
+        CurrentTenant?.ConnectionString ?? throw new InvalidOperationException("No shop is selected. Log in again.");
 
     public static SqlConnection CreateConnection() => new(ConnectionString);
 

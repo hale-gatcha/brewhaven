@@ -8,3 +8,6 @@ obj/
 .vs/
 *.user
 *.suo
+
+# Local secrets (copy App.example.config to App.config and fill in the MasterCRM password)
+App.config

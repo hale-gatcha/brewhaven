@@ -6,6 +6,7 @@ namespace BrewHaven.Forms;
 
 public sealed class LoginForm : Form
 {
+    private readonly ComboBox shop = new() { Dock = DockStyle.Fill, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly TextBox username = new() { Dock = DockStyle.Fill };
     private readonly TextBox password = new() { Dock = DockStyle.Fill, PasswordChar = '•' };
 
@@ -25,7 +26,7 @@ public sealed class LoginForm : Form
         stack.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340));
         stack.Controls.Add(new Label { Text = "Welcome back", AutoSize = true, Font = Ui.Heading, ForeColor = Ui.Text, Margin = new Padding(0, 0, 0, 2) });
         stack.Controls.Add(new Label { Text = "Log in to your Brew Haven account", AutoSize = true, Font = Ui.Body, ForeColor = Ui.Muted, Margin = new Padding(0, 0, 0, 26) });
-        foreach (var (label, box) in new (string, Control)[] { ("USERNAME", username), ("PASSWORD", password) })
+        foreach (var (label, box) in new (string, Control)[] { ("SHOP", shop), ("USERNAME", username), ("PASSWORD", password) })
         { var f = Ui.Field(label, box, 340); f.Margin = new Padding(0, 0, 0, 14); stack.Controls.Add(f); }
 
         var login = Ui.PrimaryButton("Log in"); login.Width = 340; login.Height = 42; login.Margin = new Padding(0, 10, 0, 8); login.Click += LoginClick;
@@ -36,7 +37,26 @@ public sealed class LoginForm : Form
 
         Controls.Add(right); Controls.Add(brand);
         AcceptButton = login;
-        Shown += (_,_) => { stack.Location = new Point(right.Padding.Left, Math.Max(0, (right.ClientSize.Height - stack.Height) / 2)); username.Focus(); };
+        Shown += (_,_) => { stack.Location = new Point(right.Padding.Left, Math.Max(0, (right.ClientSize.Height - stack.Height) / 2)); LoadShops(); username.Focus(); };
+    }
+
+    /// <summary>Fills the Shop dropdown from MasterCRM.</summary>
+    private void LoadShops()
+    {
+        try
+        {
+            Cursor = Cursors.WaitCursor;
+            var tenants = new TenantRepository().GetActiveTenants();
+            shop.Items.Clear();
+            foreach (var t in tenants) shop.Items.Add(t);
+            if (shop.Items.Count > 0) shop.SelectedIndex = 0;
+            else MessageBox.Show("No active shops are set up in MasterCRM.", "No shops", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Cannot connect to MasterCRM to load the shop list.\n{ex.Message}", "Database Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally { Cursor = Cursors.Default; }
     }
 
     /// <summary>Dark espresso panel with the brand mark and tagline.</summary>
@@ -94,8 +114,14 @@ public sealed class LoginForm : Form
     {
         if (string.IsNullOrWhiteSpace(username.Text) || string.IsNullOrWhiteSpace(password.Text))
         { MessageBox.Show("Username and password are required.","Validation",MessageBoxButtons.OK,MessageBoxIcon.Warning); return; }
+        if (shop.SelectedItem is not Tenant tenant)
+        {
+            if (shop.Items.Count == 0) LoadShops();   // retry if MasterCRM was unreachable at startup
+            MessageBox.Show("Please select a shop.","Validation",MessageBoxButtons.OK,MessageBoxIcon.Warning); return;
+        }
         try
         {
+            DbHelper.UseTenant(tenant);
             var repo = new UserRepository();
             string? hash = repo.GetPasswordHash(username.Text);
             if (hash is null || !PasswordHasher.Verify(password.Text, hash))
